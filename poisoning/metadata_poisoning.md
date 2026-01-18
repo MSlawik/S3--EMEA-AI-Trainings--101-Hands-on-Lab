@@ -234,7 +234,7 @@ CMD ["node", "server.js"]
 Start by building the Container with the desired environment variables so it matches your lab
 
 ```bash
-MINIO-101="10.1.10.101:9000"
+MINIO_101="10.1.10.101:9000"
 MINIO_ACCESS_KEY="admin"
 MINIO_SECRET_KEY="myPass12345"
 
@@ -242,7 +242,7 @@ MINIO_SECRET_KEY="myPass12345"
 docker build -t s3-xss-demo .
 
 docker run -p 3000:3000 \
-  -e S3_ENDPOINT=http://$MINIO-101 \
+  -e S3_ENDPOINT=http://$MINIO_101 \
   -e S3_ACCESS_KEY=$MINIO_ACCESS_KEY \
   -e S3_SECRET_KEY=$MINIO_SECRET_KEY \
   -e S3_REGION=us-east-1 \
@@ -255,13 +255,9 @@ docker run -p 3000:3000 \
 Then upload a Malicious Object to the bucket
 
 ```shell
-MINIO_ACCESS_KEY="admin"
-MINIO_SECRET_KEY="myPass12345"
-mc alias set via-proxy-minio-101 http://10.1.10.101:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY
-
 echo "This object is safe but should be scared about its metadata" > /tmp/test.txt
 mc mb minio-101/files
-mc cp /tmp/test.txt minio-101/files/test.txt --attr "description=<script>alert('XSS via metadata')</script>"
+mc cp /tmp/test.txt minio-101/files --attr "description=<script>alert(1)</script>"
 ```  
 
 Finally, you can trigger the vulnerability by opening a browser to http://localhost:3000 to browse the vulnerable web application.
