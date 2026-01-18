@@ -13,7 +13,8 @@ Here we will more especially demonstrate how can a Web app that is intended to d
 ---
 
 <br>
-## ⚠️ Disclaimer
+
+## Disclaimer
 
 This application is **intentionally vulnerable** and must be used **only for security research, education, and defensive testing in a lab environment**.
 
