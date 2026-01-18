@@ -272,12 +272,11 @@ Same, if you have objects that can be consumed by a user, is that user granted t
 
 This is why IAM Policies are meant but it can easily be messed up a policy can be associated to multiple users, on multiple buckets and with different grants. The first one that matches is the one that is applied.
 
-<!-- TO VERIFY THIS STATEMENT -->
-
 
 What we can do to mitigate privilege abuses is to separate Virtual Services based on the desired role:
 
 - Virtual Server 1: read.s3.f5demo.com (10.1.10.103)
+
   LTM Policy: readPolicy
     rule1:
     conditions (all match)
@@ -288,19 +287,23 @@ What we can do to mitigate privilege abuses is to separate Virtual Services base
         forward to pool
         otherwise drop
 
+<br>
+
 - Virtual Server 1: write.s3.f5demo.com (10.1.10.104)
   LTM Policy: writePolicy
     rule1:
     conditions (all match)
         hostname read.s3.f5demo.com
         client IP address 10.1.10.0/24
-        method: GET, PUT
+        method: GET, PUT, POST
     actions: 
         forward to pool
         otherwise drop
 
+<br>
+
 - Virtual Server 1: delete.s3.f5demo.com (10.1.10.105)
-  LTM Policy: readPolicy
+  LTM Policy: deletePolicy
     rule1:
     conditions (all match)
         hostname delete.s3.f5demo.com
@@ -310,8 +313,11 @@ What we can do to mitigate privilege abuses is to separate Virtual Services base
         forward to pool
         otherwise drop
 
- <!--Verify if that scales or if required to separate to different Virtual Servers-->       
 
+<br>
+
+:warning: 
+> LTM Policy is an elegant way of configuring this separation, however, for the same reasons than before I would encourage to use an iRule so the rejection message from the BIG-IP contains the right error code 403 and the correct XML message. This way it would not break the clientside application.
 
 
 <br><br>
