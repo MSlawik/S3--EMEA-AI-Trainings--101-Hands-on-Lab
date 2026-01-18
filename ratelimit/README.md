@@ -1,0 +1,124 @@
+# Rate-Limiting S3 requests
+
+## Why would we need to rate-limit requests?
+
+Rate-limiting is the controlled throttling of requests to an S3 service to prevent abuse, ensure stability, and optimize resource usage. Specifically, we might need to rate-limit S3 requests for several reasons:
+
+### Protect backend infrastructure
+
+S3 servers, whether AWS S3 or MinIO nodes, have finite CPU, memory, network bandwidth, and I/O throughput.
+Uncontrolled bursts (e.g., hundreds of clients requesting large files simultaneously) can overwhelm nodes, causing slow responses or failures.
+
+### Prevent service degradation
+
+Rate-limiting ensures predictable latency for all clients, preventing a few heavy users from impacting others.
+This is especially important in multi-tenant environments or when multiple applications share the same MinIO cluster.
+
+### Avoid operational costs
+
+High request rates can generate unexpected egress costs in cloud S3, or excessive load in on-prem MinIO, potentially triggering throttling or downtime.
+
+### Mitigate abusive or malicious traffic
+
+Rate-limiting can protect against DDoS attacks, misconfigured clients, or accidental loops, where a client floods the S3 cluster with requests.
+
+<br><br>
+
+Summary: Rate-limiting protects infrastructure, improves reliability, prevents abuse, and controls costs.
+
+<br><br>
+
+## On which criteria do we want to rate-limit?
+
+When implementing S3 request rate-limiting, you can base it on different criteria depending on your goals. Some common criteria include:
+
+| Criterion | Explanation	| Example / Rationale|
+|----|---|---|
+| Client identity / access key	| Rate-limit per IAM user or access key	| Prevents a single client from overwhelming the cluster while allowing others to operate normally |
+| IP address / subnet	Limit requests based on client IP	| Useful when clients don’t authenticate or you want to limit traffic per network segment (e.g., BIG-IP health check subnet) |
+| Bucket / object	Rate-limit | requests to specific buckets or hot objects	| Protects popular buckets (e.g., monitor) from floods without throttling other buckets |
+| HTTP method / action type	| Separate limits for GET, PUT, DELETE, etc.	| PUT/POST/DELETE are usually heavier on storage or processing than GET; throttling writes protects storage I/O |
+| Request size / bandwidth	| Limit based on bytes transferred per second	| Prevents large uploads or downloads from saturating network links |
+| Global cluster limit	| Total requests per second across all clients	| Ensures the MinIO cluster remains stable under load spikes |
+
+<br><br>
+
+## iRule to rate-limit S3 traffic
+
+```tcl
+# Rate Limiting iRule
+when RULE_INIT {
+    # Throughput gating
+    set static::S3_MAX_BPS          800000000   ;# 800 Mbps
+    set static::THRESHOLD_PERCENT  85
+
+    # Rate limit
+    set static::MAX_REQUESTS_PER_WINDOW 1000
+    set static::WINDOW_SECONDS          60
+    set static::RETRY_AFTER             2
+}
+
+when HTTP_REQUEST {
+
+    # ---- STEP 0: Throughput gate ----
+    set current_bps [expr { [STATS::bytes in] * 8 }]
+    set threshold_bps [expr {
+        ($static::S3_MAX_BPS * $static::THRESHOLD_PERCENT) / 100
+    }]
+
+    if { $current_bps < $threshold_bps } {
+        return
+    }
+
+    # ---- STEP 1: Extract access_key ----
+    set access_key "unknown"
+
+    if { [HTTP::header exists "Authorization"] &&
+         [regexp {Credential=([^/]+)} [HTTP::header "Authorization"] -> ak] } {
+        set access_key $ak
+    }
+
+    if { $access_key eq "unknown" } {
+        return
+    }
+
+    # ---- STEP 2: Token bucket ----
+    set key "s3_rl:$access_key"
+    set now [clock seconds]
+
+    set state [table lookup $key]
+
+    if { $state eq "" } {
+        set tokens $static::MAX_REQUESTS_PER_WINDOW
+        set last_ts $now
+    } else {
+        lassign $state tokens last_ts
+    }
+
+    # Refill
+    set elapsed [expr {$now - $last_ts}]
+    if { $elapsed > 0 } {
+        set refill [expr {
+            ($elapsed * $static::MAX_REQUESTS_PER_WINDOW) /
+            $static::WINDOW_SECONDS
+        }]
+        set tokens [expr {
+            min($static::MAX_REQUESTS_PER_WINDOW, $tokens + $refill)
+        }]
+    }
+
+    if { $tokens <= 0 } {
+        HTTP::respond 429 \
+            content "Too Many Requests" \
+            "Retry-After" $static::RETRY_AFTER
+        return
+    }
+
+    incr tokens -1
+
+    table set $key [list $tokens $now] \
+        timeout $static::WINDOW_SECONDS \
+        lifetime $static::WINDOW_SECONDS
+}
+
+```
