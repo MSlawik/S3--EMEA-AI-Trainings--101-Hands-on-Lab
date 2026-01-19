@@ -215,7 +215,7 @@ CMD ["uvicorn", "proxy:app", "--host", "0.0.0.0", "--port", "9000"]
 ```bash
 docker build -t s3-header-tamper-proxy .
 
-docker run -d \
+docker run -d --restart unless-stopped \
   -p 9000:9000 \
   -e TARGET_HOST=10.1.20.101 \
   -e TARGET_PORT=9000 \
