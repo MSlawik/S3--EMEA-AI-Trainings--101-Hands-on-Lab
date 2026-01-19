@@ -3,20 +3,24 @@
 ## Why would we need to rate-limit requests?
 
 Rate-limiting is the controlled throttling of requests to an S3 service to prevent abuse, ensure stability, and optimize resource usage. Specifically, we might need to rate-limit S3 requests for several reasons:
+<br>
 
 ### Protect backend infrastructure
 
 S3 servers, whether AWS S3 or MinIO nodes, have finite CPU, memory, network bandwidth, and I/O throughput.
 Uncontrolled bursts (e.g., hundreds of clients requesting large files simultaneously) can overwhelm nodes, causing slow responses or failures.
+<br>
 
 ### Prevent service degradation
 
 Rate-limiting ensures predictable latency for all clients, preventing a few heavy users from impacting others.
 This is especially important in multi-tenant environments or when multiple applications share the same MinIO cluster.
+<br>
 
 ### Avoid operational costs
 
 High request rates can generate unexpected egress costs in cloud S3, or excessive load in on-prem MinIO, potentially triggering throttling or downtime.
+<br>
 
 ### Mitigate abusive or malicious traffic
 
@@ -24,9 +28,6 @@ Rate-limiting can protect against DDoS attacks, misconfigured clients, or accide
 
 <br><br>
 
-Summary: Rate-limiting protects infrastructure, improves reliability, prevents abuse, and controls costs.
-
-<br><br>
 
 ## On which criteria do we want to rate-limit?
 
