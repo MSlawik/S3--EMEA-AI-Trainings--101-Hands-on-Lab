@@ -11,9 +11,8 @@ This profiles integrates as one-click default options within the LTM configurati
 
 
 <p align="center">
-	<img width="500" src="https://github.com/fchmainy/s3_lab/blob/main/docs/s3_lab_s3-tcp_profile.jpg?raw=true" alt="UDF S3 Topo">
+	<img width="800" src="https://github.com/f5devcentral/S3--EMEA-AI-Trainings--101-Hands-on-Lab/blob/main/docs/s3_lab_s3-tcp_profile.jpg?raw=true" alt="UDF S3 Topo">
 </p>
-<br>
 <br>
 <br>
 
