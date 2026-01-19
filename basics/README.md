@@ -84,8 +84,12 @@ mc cp /tmp/object1.txt minio-101/bucket1/exercice1/object1.txt
 Let's debug this request so we can understand what the mc client did here:
 We are going to add the **debug** attribute to the request so we can see the HTTP requests issued between the client and the S3 node.
 
-```yaml
+```shell
 mc --debug cp ./object1.txt minio-101/bucket1/exercice1/object1.txt
+```
+You should get a similar reponse from the server:
+
+```yaml
  0 B / ? ┃░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▓┃
 mc: <DEBUG> GET /bucket1/?location= HTTP/1.1
 Host: 10.1.10.101:9000
