@@ -10,6 +10,7 @@ This section of the lab is intended to give you some hands-on experience on S3 b
 
 [4.3 Lessons learned](https://github.com/fchmainy/s3_lab/tree/main/basics#lessons-learned)
 
+<br><br>
 
 ## 4.1 Create a bucket
 
@@ -51,7 +52,8 @@ mc alias set demovip https://mixed.s3.f5demo.com "$MINIO_ACCESS_KEY" "$MINIO_SEC
 > the last command creates an alias for the Virtual Server created to serve all nodes. The command has the **--insecure** argument because it is served through HTTPS with a self-signed certificate.
 
 
-Then, we are creating a bucket named **bucket1** on each of them
+Then, we are creating a bucket named **bucket1** on each of the nodes:
+
 ```shell
 mc mb minio-101/bucket1
 mc mb minio-102/bucket1
@@ -233,20 +235,25 @@ mc: <DEBUG> Response Time:  4.950594ms
 Let's see in details what happened:
 
 - GET /bucket1/?location= (200 OK)
+  
   mc checks the bucket’s region (S3 LocationConstraint).
-  
+<br>  
 - GET /bucket1/?object-lock= (404 Not Found)
+  
   mc checks if Object Lock is enabled; bucket has no object-lock config.
-  
+<br>
 - HEAD /bucket1/exercice1/object1.txt (404 Not Found - NoSuchKey)
+  
   mc verifies whether the target object already exists.
-  
+<br>  
 - GET /bucket1/?list-type=2&prefix=exercice1/object1.txt/ (200 OK)
-  mc ensures no conflicting “directory-like” prefix exists.
   
+  mc ensures no conflicting “directory-like” prefix exists.
+<br>  
 - PUT /bucket1/exercice1/object1.txt (streaming payload) (200 OK)
+  
   The object is uploaded successfully; MinIO returns an ETag.
-
+<br><br>
 Result: upload completes, 30 B / 30 B transferred successfully.
 
 <br><br>
@@ -254,14 +261,22 @@ Result: upload completes, 30 B / 30 B transferred successfully.
 The 3 first requests are for metadata control (region, object lock, head and get). For an upload, the most important request is the last one **PUT**.
 <br><br>
 But the most interesting part to look into is the Authorization header. Remember, here we use credentials (ACCESS_KEY and SECRET_KEY):
+
 - **Authorization: AWS4-HMAC-SHA256…** indicates Signature Version 4 (SigV4).
+
 - **Credential=admin/20260113/us-east-1/s3/aws4_request** Access key is **admin**, date of the request is **20260113**, the region of the node is **us-east-1**.
+
 - **SignedHeaders=host;x-amz-content-sha256;x-amz-date[;…]** List of the HTTP headers that are signed.
+
 - **Signature=<HMAC-SHA256>** HMAC over the canonical request, using the derived signing key.
   The Canonical request includes: HTTP method, URI, query string, signed headers, and payload hash.
+
 - For metadata calls (GET/HEAD): **X-Amz-Content-Sha256 = e3b0c4…** which is the SHA256 of an empty body.
+
 - For the PUT upload: **X-Amz-Content-Sha256 = STREAMING-AWS4-HMAC-SHA256-PAYLOAD**
+
 - **X-Amz-Date: 20260113T111334Z** Request timestamp used in key derivation and replay protection.
+
 - **X-Amz-Decoded-Content-Length: 30** Original payload size before streaming/chunk encoding.
 
 When the objects arrive on the S3 node, the S3 service recomputes the signature server-side and compares it with the received hash; if the hashes match the access is allowed. If not, the server issues a **403 SignatureDoesNotMatch** or **AccessDenied** response.
@@ -281,42 +296,70 @@ You have more details on the Canonical hash at: [https://docs.aws.amazon.com/Ama
    
 ```shell
 mc ls minio-101/bucket1/
-[2026-01-13 14:48:36 UTC]     0B exercice1/
-
-mc ls minio-101/bucket1/exercice1
-[2026-01-13 11:13:34 UTC]    30B STANDARD object1.txt
 ```
+
+> [2026-01-13 14:48:36 UTC]     0B exercice1/
+
+<br>
+
+```shell
+mc ls minio-101/bucket1/exercice1
+```
+
+> [2026-01-13 11:13:34 UTC]    30B STANDARD object1.txt
+
+<br><br>
 
 2. you can get all metadata of an object:
 
 ```shell
 mc stat minio-101/bucket1/exercice1/object1.txt
-Name      : object1.txt
-Date      : 2026-01-13 11:13:34 UTC
-Size      : 30 B
-ETag      : 723f593bf8031534ee9d9d6983e37f3e
-Type      : file
-Metadata  :
-  Content-Type: text/plain
 ```
+
+> Name      : object1.txt
+>
+> Date      : 2026-01-13 11:13:34 UTC
+> 
+> Size      : 30 B
+> 
+> ETag      : 723f593bf8031534ee9d9d6983e37f3e
+> 
+> Type      : file
+> 
+> Metadata  :
+> 
+>  Content-Type: text/plain
+
+<br><br>
 
 3. Display the first lines of an object (default is 10 lines, you can specifify how many lines you want to print):
 
 ```shell
 mc head --lines 5 minio-101/bucket1/exercice1/object1.txt
-This is an object for Bucket1
 ```
+
+> This is an object for Bucket1
+
+<br>
 
 4. You can download the file to a specific local emplacement:
 
 ```shell
 mc get minio-101/bucket1/exercice1/object1.txt /tmp/object1_downloaded.txt
-...//10.1.10.101:9000/bucket1/exercice1/object1.txt: 30 B / 30 B ┃▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓┃ 3.00 KiB/s 0subuntu@client:~$ cat /tmp/object1_downloaded.txt
-This is an object for Bucket1
 ```
-Now, you can run these commands with the **debug** argument and you will see the headers and the canonical hashed headers
 
-```shell
+> ...//10.1.10.101:9000/bucket1/exercice1/object1.txt: 30 B / 30 B
+> 
+> ┃▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓┃ 3.00 KiB/s 0
+>
+> cat /tmp/object1_downloaded.txt
+> 
+> This is an object for Bucket1
+
+<br>
+Now, you can run the same exact commands with the **--debug** argument and you will see the headers and the canonical hashed headers
+
+```yaml
 mc: <DEBUG> GET /bucket1/exercice1/object1.txt HTTP/1.1
 Host: 10.1.10.101:9000
 User-Agent: MinIO (linux; amd64) minio-go/v7.0.90 mc/DEVELOPMENT.GOGET
@@ -354,6 +397,9 @@ This is an object for Bucket1
 If you try accessing your object through HTTP using curl, it should fail:
 ```shell
 curl -vvv http://10.1.10.101:9000/bucket1/exercice1/object1.txt
+```
+
+```yaml
 *   Trying 10.1.10.101:9000...
 * Connected to 10.1.10.101 (10.1.10.101) port 9000 (#0)
 > GET /bucket1/exercice1/object1.txt HTTP/1.1
@@ -382,9 +428,10 @@ curl -vvv http://10.1.10.101:9000/bucket1/exercice1/object1.txt
 * Connection #0 to host 10.1.10.101 left intact
 <Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>exercice1/object1.txt</Key><BucketName>bucket1</BucketName><Resource>/bucket1/exercice1/object1.txt</Resource><RequestId>188A5288B4C92B23</RequestId><HostId>dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8</HostId></Error
 ```
+
 You get a **403 - Forbidden** response with an **Access Denied** message because S3 Services are authenticated by default (least privileges).
 
-:notebook:
+:notebook: Notes:
 > The same principles exists when building an app code that requests to access objects in S3 buckets. You can either:
 > - use a SDK (boto3, minio-py...)
 > - build your own functions to compute the canonical hash.
@@ -401,6 +448,9 @@ By setting the bucket anonymous, you have removed the authentication entirely.
 
 ```shell
 curl http://10.1.10.101:9000/bucket1/
+```
+
+```yaml
 <?xml version="1.0" encoding="UTF-8"?>
 <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>bucket1</Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>exercice1/object1.txt</Key><LastModified>2026-01-13T11:13:34.464Z</LastModified><ETag>&#34;723f593bf8031534ee9d9d6983e37f3e&#34;</ETag><Size>30</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>
 
@@ -435,10 +485,15 @@ This is an object for Bucket1
 * Connection #0 to host 10.1.10.101 left intact
 ```
 
+<br>
+
 but you can also add objects:
 ```shell
 echo "This is a second object for Bucket1" > /tmp/object2.txt
 curl -X PUT -d@/tmp/object2.txt http://10.1.10.101:9000/bucket1/exercice1/object2.txt -vvv
+```
+
+```yaml
 *   Trying 10.1.10.101:9000...
 * Connected to 10.1.10.101 (10.1.10.101) port 9000 (#0)
 > PUT /bucket1/exercice1/object2.txt HTTP/1.1
@@ -466,23 +521,56 @@ curl -X PUT -d@/tmp/object2.txt http://10.1.10.101:9000/bucket1/exercice1/object
 < Date: Tue, 13 Jan 2026 15:09:51 GMT
 <
 * Connection #0 to host 10.1.10.101 left intact
-
-curl http://10.1.10.101:9000/bucket1/
-<?xml version="1.0" encoding="UTF-8"?>
-<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>bucket1</Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>exercice1/object1.txt</Key><LastModified>2026-01-13T11:13:34.464Z</LastModified><ETag>&#34;723f593bf8031534ee9d9d6983e37f3e&#34;</ETag><Size>30</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>exercice1/object2.txt</Key><LastModified>2026-01-13T15:09:51.503Z</LastModified><ETag>&#34;75afa505f61b67b388d19708b370482d&#34;</ETag><Size>35</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>
 ```
 
-or even worst:
+```shell
+curl http://10.1.10.101:9000/bucket1/
+```
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult
+	xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+	<Name>bucket1</Name>
+	<Prefix></Prefix>
+	<Marker></Marker>
+	<MaxKeys>1000</MaxKeys>
+	<IsTruncated>false</IsTruncated>
+	<Contents>
+		<Key>exercice1/object1.txt</Key>
+		<LastModified>2026-01-13T11:13:34.464Z</LastModified>
+		<ETag>&#34;723f593bf8031534ee9d9d6983e37f3e&#34;</ETag>
+		<Size>30</Size>
+		<Owner>
+			<ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID>
+			<DisplayName>minio</DisplayName>
+		</Owner>
+		<StorageClass>STANDARD</StorageClass>
+	</Contents>
+	<Contents>
+		<Key>exercice1/object2.txt</Key>
+		<LastModified>2026-01-13T15:09:51.503Z</LastModified>
+		<ETag>&#34;75afa505f61b67b388d19708b370482d&#34;</ETag>
+		<Size>35</Size>
+		<Owner>
+			<ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID>
+			<DisplayName>minio</DisplayName>
+		</Owner>
+		<StorageClass>STANDARD</StorageClass>
+	</Contents>
+</ListBucketResult>
+```
+
+or even worst (**DON'T DO IT!** This is only to make you understand the potential impact of making a bucket public):
 ```shell
 curl -X DELETE http://10.1.10.101:9000/bucket1/exercice1/object2.txt
-
-mc ls minio-101/bucket1/exercice1
-[2026-01-13 11:13:34 UTC]    30B STANDARD object1.txt
 ```
+
+
 
 
 <br><br>
-## 4.3 Lessons learned
+## 4.3 Lessons learned, Key Takeaways:
 - Authorization happens on the server side.
 - **making a bucket public (anonymous) removes authentication entirely on the bucket** and does not require credentials or signature.
 
@@ -493,6 +581,8 @@ Although it makes life easier, <font color="red">**you should never make buckets
 - allow malicious users create ransomware by encrypting objects.
 
 all of these with legal & reputational impacts.
+
+We will see later in the lab how to inspect traffic with BIG-IP and prevent any anonymous access to buckets.
 
 <br><br>
 
