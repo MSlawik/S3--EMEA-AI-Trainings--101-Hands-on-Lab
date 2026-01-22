@@ -217,7 +217,7 @@ docker build -t s3-header-tamper-proxy .
 
 docker run -d --restart unless-stopped \
   -p 9000:9000 \
-  -e TARGET_HOST=10.1.20.101 \
+  -e TARGET_HOST=10.1.10.101 \
   -e TARGET_PORT=9000 \
   -e TAMPER_HEADER=x-amz-meta-custom-data \
   -e TAMPER_VALUE=tampered \
@@ -235,7 +235,9 @@ docker run -d --restart unless-stopped \
 Create alias pointing to the proxy:
 
 ```bash
-mc alias set minio-I01 http://127.0.0.1:9000 MINIO_ACCESS_KEY MINIO_SECRET_KEY
+MINIO_ACCESS_KEY="admin"
+MINIO_SECRET_KEY="myPass12345"
+mc alias set minio-I01 http://127.0.0.1:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY
 ```
 
 :warning: Important: here mc signs requests to the proxy. This is important so the client does not suspect the Man in the Middle.
