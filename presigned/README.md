@@ -201,59 +201,78 @@ when HTTP_REQUEST {
     set qs     [HTTP::query]
 
     set is_presigned 0
+    set bucket ""
 
-    # Presigned GET / PUT (query-string SigV4)
-    if { [string match "*X-Amz-Signature=*" $qs] } {
-        set is_presigned 1
+
+    if { $method eq "GET" || $method eq "PUT" || $method eq "HEAD" } {
+        if {
+            [string match "*X-Amz-Algorithm=*"  $qs] &&
+            [string match "*X-Amz-Credential=*" $qs] &&
+            [string match "*X-Amz-Date=*"       $qs] &&
+            [string match "*X-Amz-Signature=*"  $qs]
+        } {
+            set is_presigned 1
+        }
     }
 
-    # Presigned POST (multipart form)
-    if { [string match "*policy=*" $qs] && [string match "*x-amz-signature*" $qs] } {
-        set is_presigned 1
+
+    if { ! $is_presigned && $method eq "POST" } {
+
+        # multipart/form-data
+        if { [HTTP::header exists "Content-Type"] &&
+             [string match "multipart/form-data*" [HTTP::header value "Content-Type"]] } {
+
+            # No SigV4 Authorization header
+            if { ! [HTTP::header exists "Authorization"] } {
+
+                # POST to /bucket or /bucket/
+                if { [regexp {^/([^/?]+)/?$} $uri -> bucket] } {
+                    set is_presigned 1
+                }
+            }
+        }
     }
 
     if { ! $is_presigned } {
         return
     }
 
-    # Extract bucket name (path-style): /bucket/object
-    set bucket ""
-    if { [regexp {^/([^/]+)/} $uri -> bucket] } {
-        # bucket is extracted
+
+    if { $bucket eq "" } {
+        regexp {^/([^/?]+)} $uri -> bucket
     }
 
-    # Virtual-host-style: bucket.s3.example.com
-    if { $bucket eq "" && [regexp {^([^.]+)\.} $host -> bucket] } {
-        # bucket is extracted
+
+    if { $bucket eq "" &&
+         [regexp {^([^.]+)\.s3\.example\.com$} $host -> bucket] } {
+        # ok
     }
 
     if { $bucket eq "" } {
         return
     }
 
-    # Check datagroup
+
     if { ! [class match $bucket equals dg_presign_block_buckets] } {
         return
     }
 
-    #  Log the blocked request 
-    log local0.warning "S3 PRESIGNED BLOCK: method=$method bucket=$bucket uri=$uri host=$host client=[IP::client_addr]"
+    log local0.warning \
+        "S3 PRESIGNED BLOCK: method=$method bucket=$bucket uri=$uri host=$host client=[IP::client_addr]"
 
-    # Return S3-compatible Forbidden response
-    HTTP::respond 403 content {
-<?xml version="1.0" encoding="UTF-8"?>
+    HTTP::respond 403 content \
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <Error>
   <Code>AccessDenied</Code>
   <Message>Access Denied</Message>
-  <BucketName></BucketName>
+  <BucketName>$bucket</BucketName>
   <RequestId>BLOCKPRESIGN</RequestId>
   <HostId>PROXY</HostId>
-</Error>
-} \
-    "Content-Type" "application/xml" \
-    "x-amz-request-id" "BLOCKPRESIGN" \
-    "x-amz-id-2" "PROXYBLOCKED" \
-    "Connection" "close"
+</Error>" \
+        "Content-Type" "application/xml" \
+        "x-amz-request-id" "BLOCKPRESIGN" \
+        "x-amz-id-2" "PROXYBLOCKED" \
+        "Connection" "close"
 
     event disable all
 }
@@ -264,15 +283,6 @@ when HTTP_REQUEST {
 S3 Pre-signed URLs are a great feature that are very convenient for time limited access to a bucket or a specific object. But all great powers should be used carefully! Remember pre-signed URLs are non authenticated endpoints and could be abused, leaked, replayed, or over-privileged.
 
 Here we provided an iRule, you can also create your own A.WAF custom attack signatures to fullfill the same goals:
-
-| Signature Name | S3_PRESIGNED_URL_QUERY |
-|---|---|
-| Attack Type | Authentication Bypass |
-| Risk | High |
-| Accuracy | High |
-| Target	| Request Query String |
-| Signature Type	 | Regular Expression |
-| Signature Pattern | (?i)(^|&)x-amz-signature=[0-9a-f]{64}($|&) |
 
 
 
